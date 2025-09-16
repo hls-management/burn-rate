@@ -14,7 +14,17 @@ export class CLIInterface {
         this.gameController = new GameController(gameEngine);
         this.gameDisplay = new GameDisplay(config);
         this.inputHandler = new InputHandler();
-        this.config = config;
+        this.config = {
+            // Set default combat display preferences
+            combatDisplay: {
+                showTacticalAnalysis: true,
+                showBattlePhases: true,
+                detailedCasualties: true,
+                useEnhancedFormatting: true,
+                ...config.combatDisplay
+            },
+            ...config
+        };
     }
     /**
      * Starts the CLI game loop
@@ -99,6 +109,11 @@ export class CLIInterface {
                                 this.displayHelp();
                                 break;
                             case 'end_turn':
+                                // Display turn result after processing
+                                const turnResult = this.gameController.getLastTurnResult();
+                                if (turnResult) {
+                                    this.displayTurnResult(turnResult);
+                                }
                                 turnComplete = true;
                                 break;
                             case 'quit':

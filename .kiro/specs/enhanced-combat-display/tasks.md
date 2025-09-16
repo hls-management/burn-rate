@@ -19,32 +19,32 @@
   - Add battle outcome formatting with appropriate colors and explanations
   - _Requirements: 1.1, 1.4, 2.2_
 
-- [-] 4. Add detailed casualty and survivor reporting
+- [x] 4. Add detailed casualty and survivor reporting
   - Enhance casualty display with color-coded loss information
   - Implement survivor reporting with tactical context
   - Add percentage-based casualty reporting for better understanding
   - _Requirements: 1.1, 2.3, 3.4_
 
-- [ ] 5. Implement battle phase progression display
+- [x] 5. Implement battle phase progression display
   - Add battle phase determination logic to show combat progression
   - Implement phase-by-phase advantage display
   - Create visual separators and formatting for battle phases
   - _Requirements: 3.2, 3.4, 2.4_
 
-- [ ] 6. Update turn result display integration
+- [x] 6. Update turn result display integration
   - Modify `displayTurnResult` method to use enhanced combat display
   - Ensure proper timing and ordering of combat event display
   - Add configuration options for display preferences
   - _Requirements: 4.1, 4.2, 4.3_
 
-- [ ] 7. Add comprehensive error handling and fallbacks
+- [x] 7. Add comprehensive error handling and fallbacks
   - Implement color support detection and graceful fallbacks
   - Add validation for combat event data before display
   - Create error handling for malformed or incomplete combat information
   - Write tests for error scenarios and fallback behavior
   - _Requirements: 1.2, 2.4_
 
-- [ ] 8. Create integration tests for enhanced combat display
+- [x] 8. Create integration tests for enhanced combat display
   - Write integration tests that verify complete combat display flow
   - Test color consistency across multiple combat events
   - Verify display works correctly with various combat scenarios

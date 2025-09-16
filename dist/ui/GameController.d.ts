@@ -1,4 +1,4 @@
-import { GameEngine } from '../engine/GameEngine.js';
+import { GameEngine, TurnResult } from '../engine/GameEngine.js';
 import { Command } from './InputHandler.js';
 export interface CommandExecutionResult {
     success: boolean;
@@ -8,6 +8,7 @@ export interface CommandExecutionResult {
 export declare class GameController {
     private gameEngine;
     private pendingPlayerActions;
+    private lastTurnResult;
     constructor(gameEngine: GameEngine);
     /**
      * Executes a player command and returns the result
@@ -53,6 +54,10 @@ export declare class GameController {
      * Clears pending actions (for testing)
      */
     clearPendingActions(): void;
+    /**
+     * Gets the last turn result for display
+     */
+    getLastTurnResult(): TurnResult | null;
     /**
      * Gets the game engine instance
      */

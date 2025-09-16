@@ -3,6 +3,12 @@ export interface CLIConfig {
     showDebugInfo?: boolean;
     autoAdvanceTurn?: boolean;
     useColors?: boolean;
+    combatDisplay?: {
+        showTacticalAnalysis?: boolean;
+        showBattlePhases?: boolean;
+        detailedCasualties?: boolean;
+        useEnhancedFormatting?: boolean;
+    };
 }
 export declare class CLIInterface {
     private gameEngine;

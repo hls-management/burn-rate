@@ -6,6 +6,8 @@
     <title>Burn Rate - Strategy Game</title>
     <meta name="description" content="A turn-based strategy game with roguelike elements">
     <link rel="stylesheet" href="./styles/main.css">
+    <link rel="stylesheet" href="./styles/components.css">
+    <link rel="stylesheet" href="./styles/responsive.css">
 </head>
 <body>
     <div id="burn-rate-game">
@@ -15,6 +17,7 @@
                 Turn: <span id="current-turn">1</span>
             </div>
             <div class="game-controls">
+                <button id="theme-toggle" class="theme-toggle" title="Toggle theme">🌙</button>
                 <button id="new-game-btn" class="secondary-button">New Game</button>
                 <button id="settings-btn" class="secondary-button">Settings</button>
             </div>
@@ -46,15 +49,117 @@
                 <div class="command-panels">
                     <div id="build-panel" class="command-panel active">
                         <h4>Build Units & Structures</h4>
-                        <!-- Build interface will be populated by JavaScript -->
+                        <form id="build-form" class="command-form" data-action-type="build">
+                            <div class="form-group">
+                                <label for="build-type">Type:</label>
+                                <select id="build-type" name="buildType" required>
+                                    <optgroup label="Units">
+                                        <option value="frigate">Frigate (4 Metal, 2 Energy)</option>
+                                        <option value="cruiser">Cruiser (10 Metal, 6 Energy)</option>
+                                        <option value="battleship">Battleship (20 Metal, 12 Energy)</option>
+                                    </optgroup>
+                                    <optgroup label="Structures">
+                                        <option value="reactor">Reactor (900 Metal, 1200 Energy)</option>
+                                        <option value="mine">Mine (1500 Metal, 600 Energy)</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="build-quantity">Quantity:</label>
+                                <input type="number" id="build-quantity" name="quantity" min="1" max="10000" value="1" required>
+                                <div class="input-help">
+                                    <span id="build-cost-display">Cost: 4 Metal, 2 Energy</span>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-button">Build</button>
+                                <button type="button" id="build-max-btn" class="secondary-button">Max Affordable</button>
+                            </div>
+                            <div id="build-validation" class="validation-feedback"></div>
+                        </form>
                     </div>
                     <div id="attack-panel" class="command-panel">
                         <h4>Attack</h4>
-                        <!-- Attack interface will be populated by JavaScript -->
+                        <form id="attack-form" class="command-form" data-action-type="attack">
+                            <div class="fleet-composition">
+                                <div class="form-group">
+                                    <label for="attack-frigates">Frigates:</label>
+                                    <input type="number" id="attack-frigates" name="frigates" min="0" value="0">
+                                    <span class="available-count" id="frigates-available">Available: 0</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="attack-cruisers">Cruisers:</label>
+                                    <input type="number" id="attack-cruisers" name="cruisers" min="0" value="0">
+                                    <span class="available-count" id="cruisers-available">Available: 0</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="attack-battleships">Battleships:</label>
+                                    <input type="number" id="attack-battleships" name="battleships" min="0" value="0">
+                                    <span class="available-count" id="battleships-available">Available: 0</span>
+                                </div>
+                            </div>
+                            <div class="fleet-summary">
+                                <div class="summary-item">
+                                    <span class="label">Total Ships:</span>
+                                    <span id="attack-total-ships">0</span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="label">Fleet Power:</span>
+                                    <span id="attack-fleet-power">0</span>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-button danger">Launch Attack</button>
+                                <button type="button" id="attack-all-btn" class="secondary-button">All Ships</button>
+                                <button type="button" id="attack-clear-btn" class="secondary-button">Clear</button>
+                            </div>
+                            <div id="attack-validation" class="validation-feedback"></div>
+                        </form>
                     </div>
                     <div id="scan-panel" class="command-panel">
                         <h4>Intelligence Scan</h4>
-                        <!-- Scan interface will be populated by JavaScript -->
+                        <form id="scan-form" class="command-form" data-action-type="scan">
+                            <div class="scan-options">
+                                <div class="scan-option">
+                                    <input type="radio" id="scan-basic" name="scanType" value="basic" checked>
+                                    <label for="scan-basic" class="scan-label">
+                                        <div class="scan-name">Basic Scan</div>
+                                        <div class="scan-cost">Cost: 1,000 Energy</div>
+                                        <div class="scan-description">Reveals enemy fleet size estimate</div>
+                                    </label>
+                                </div>
+                                <div class="scan-option">
+                                    <input type="radio" id="scan-deep" name="scanType" value="deep">
+                                    <label for="scan-deep" class="scan-label">
+                                        <div class="scan-name">Deep Scan</div>
+                                        <div class="scan-cost">Cost: 2,500 Energy</div>
+                                        <div class="scan-description">Reveals fleet composition and economy</div>
+                                    </label>
+                                </div>
+                                <div class="scan-option">
+                                    <input type="radio" id="scan-advanced" name="scanType" value="advanced">
+                                    <label for="scan-advanced" class="scan-label">
+                                        <div class="scan-name">Advanced Scan</div>
+                                        <div class="scan-cost">Cost: 4,000 Energy</div>
+                                        <div class="scan-description">Reveals strategic intent and detailed analysis</div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="intelligence-summary">
+                                <div class="summary-item">
+                                    <span class="label">Last Scan:</span>
+                                    <span id="last-scan-info">Never</span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="label">Data Age:</span>
+                                    <span id="scan-data-age">N/A</span>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-button">Perform Scan</button>
+                            </div>
+                            <div id="scan-validation" class="validation-feedback"></div>
+                        </form>
                     </div>
                 </div>
             </section>

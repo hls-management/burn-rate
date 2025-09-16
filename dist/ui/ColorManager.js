@@ -29,6 +29,24 @@ export class ColorManager {
         };
     }
     /**
+     * Validates and sanitizes numeric values with optional bounds checking
+     */
+    validateNumericValue(value, fieldName, min = 0, max = Number.MAX_SAFE_INTEGER) {
+        if (typeof value !== 'number' || isNaN(value) || !isFinite(value)) {
+            console.warn(`ColorManager.validateNumericValue: Invalid ${fieldName} value '${value}', using 0`);
+            return 0;
+        }
+        if (value < min) {
+            console.warn(`ColorManager.validateNumericValue: ${fieldName} value ${value} below minimum ${min}, using ${min}`);
+            return min;
+        }
+        if (value > max) {
+            console.warn(`ColorManager.validateNumericValue: ${fieldName} value ${value} above maximum ${max}, using ${max}`);
+            return max;
+        }
+        return Math.floor(value); // Ensure integer values
+    }
+    /**
      * Detects if the terminal supports color output
      */
     detectColorSupport() {
@@ -57,88 +75,182 @@ export class ColorManager {
      * Applies color to text if colors are enabled
      */
     colorize(text, colorType) {
+        // Validate input parameters
+        if (typeof text !== 'string') {
+            console.warn('ColorManager.colorize: text parameter must be a string, received:', typeof text);
+            return String(text || '');
+        }
         if (!this.colorsEnabled) {
             return text;
         }
-        const colorCode = this.theme[colorType];
-        const resetCode = this.theme.reset;
-        return `${colorCode}${text}${resetCode}`;
+        try {
+            const colorCode = this.theme[colorType];
+            const resetCode = this.theme.reset;
+            // Validate color codes exist
+            if (!colorCode || !resetCode) {
+                console.warn(`ColorManager.colorize: Missing color code for type '${colorType}', falling back to plain text`);
+                return text;
+            }
+            return `${colorCode}${text}${resetCode}`;
+        }
+        catch (error) {
+            console.warn('ColorManager.colorize: Error applying colors, falling back to plain text:', error);
+            return text;
+        }
     }
     /**
      * Formats fleet composition with color coding for unit types
      */
     formatFleetComposition(fleet, showColors = true) {
-        if (!showColors || !this.colorsEnabled) {
-            return `${fleet.frigates}F, ${fleet.cruisers}C, ${fleet.battleships}B`;
+        // Validate fleet composition data
+        if (!fleet || typeof fleet !== 'object') {
+            console.warn('ColorManager.formatFleetComposition: Invalid fleet composition data, using defaults');
+            fleet = { frigates: 0, cruisers: 0, battleships: 0 };
         }
-        const frigateText = this.colorize(`${fleet.frigates}F`, 'frigate');
-        const cruiserText = this.colorize(`${fleet.cruisers}C`, 'cruiser');
-        const battleshipText = this.colorize(`${fleet.battleships}B`, 'battleship');
-        return `${frigateText}, ${cruiserText}, ${battleshipText}`;
+        // Ensure numeric values and handle invalid data
+        const frigates = this.validateNumericValue(fleet.frigates, 'frigates');
+        const cruisers = this.validateNumericValue(fleet.cruisers, 'cruisers');
+        const battleships = this.validateNumericValue(fleet.battleships, 'battleships');
+        if (!showColors || !this.colorsEnabled) {
+            return `${frigates}F, ${cruisers}C, ${battleships}B`;
+        }
+        try {
+            const frigateText = this.colorize(`${frigates}F`, 'frigate');
+            const cruiserText = this.colorize(`${cruisers}C`, 'cruiser');
+            const battleshipText = this.colorize(`${battleships}B`, 'battleship');
+            return `${frigateText}, ${cruiserText}, ${battleshipText}`;
+        }
+        catch (error) {
+            console.warn('ColorManager.formatFleetComposition: Error formatting with colors, falling back to plain text:', error);
+            return `${frigates}F, ${cruisers}C, ${battleships}B`;
+        }
     }
     /**
      * Formats battle outcome with appropriate colors
      */
     formatBattleOutcome(outcome, perspective) {
+        // Validate input parameters
+        if (typeof outcome !== 'string') {
+            console.warn('ColorManager.formatBattleOutcome: Invalid outcome type, using default');
+            outcome = 'unknown_outcome';
+        }
+        if (perspective !== 'attacker' && perspective !== 'defender') {
+            console.warn('ColorManager.formatBattleOutcome: Invalid perspective, defaulting to attacker');
+            perspective = 'attacker';
+        }
+        const formattedOutcome = outcome.toUpperCase().replace(/_/g, ' ');
         if (!this.colorsEnabled) {
-            return outcome.toUpperCase().replace('_', ' ');
+            return formattedOutcome;
         }
-        let colorType;
-        switch (outcome) {
-            case 'decisive_attacker':
-                colorType = perspective === 'attacker' ? 'victory' : 'defeat';
-                break;
-            case 'decisive_defender':
-                colorType = perspective === 'defender' ? 'victory' : 'defeat';
-                break;
-            case 'close_battle':
-                colorType = 'neutral';
-                break;
-            default:
-                colorType = 'neutral';
+        try {
+            let colorType;
+            switch (outcome) {
+                case 'decisive_attacker':
+                    colorType = perspective === 'attacker' ? 'victory' : 'defeat';
+                    break;
+                case 'decisive_defender':
+                    colorType = perspective === 'defender' ? 'victory' : 'defeat';
+                    break;
+                case 'close_battle':
+                    colorType = 'neutral';
+                    break;
+                default:
+                    console.warn(`ColorManager.formatBattleOutcome: Unknown outcome '${outcome}', using neutral color`);
+                    colorType = 'neutral';
+            }
+            return this.colorize(formattedOutcome, colorType);
         }
-        return this.colorize(outcome.toUpperCase().replace('_', ' '), colorType);
+        catch (error) {
+            console.warn('ColorManager.formatBattleOutcome: Error formatting outcome, falling back to plain text:', error);
+            return formattedOutcome;
+        }
     }
     /**
      * Formats casualty information with warning colors
      */
     formatCasualties(casualties, total) {
-        const percentage = total > 0 ? Math.round((casualties / total) * 100) : 0;
-        const casualtyText = `${casualties} ships (${percentage}%)`;
+        // Validate and sanitize input values
+        const validCasualties = this.validateNumericValue(casualties, 'casualties');
+        const validTotal = this.validateNumericValue(total, 'total');
+        const percentage = validTotal > 0 ? Math.round((validCasualties / validTotal) * 100) : 0;
+        const casualtyText = `${validCasualties} ships (${percentage}%)`;
         if (!this.colorsEnabled) {
             return casualtyText;
         }
-        return this.colorize(casualtyText, 'casualties');
+        try {
+            return this.colorize(casualtyText, 'casualties');
+        }
+        catch (error) {
+            console.warn('ColorManager.formatCasualties: Error formatting casualties, falling back to plain text:', error);
+            return casualtyText;
+        }
     }
     /**
      * Formats survivor information with positive colors
      */
     formatSurvivors(survivors) {
-        const survivorText = `${survivors} ships`;
+        // Validate and sanitize input value
+        const validSurvivors = this.validateNumericValue(survivors, 'survivors');
+        const survivorText = `${validSurvivors} ships`;
         if (!this.colorsEnabled) {
             return survivorText;
         }
-        return this.colorize(survivorText, 'survivors');
+        try {
+            return this.colorize(survivorText, 'survivors');
+        }
+        catch (error) {
+            console.warn('ColorManager.formatSurvivors: Error formatting survivors, falling back to plain text:', error);
+            return survivorText;
+        }
     }
     /**
      * Formats player/AI identification with distinct colors
      */
     formatPlayerIdentifier(playerType, text) {
+        // Validate input parameters
+        if (typeof text !== 'string') {
+            console.warn('ColorManager.formatPlayerIdentifier: text parameter must be a string');
+            text = String(text || '');
+        }
+        if (playerType !== 'player' && playerType !== 'ai') {
+            console.warn('ColorManager.formatPlayerIdentifier: Invalid playerType, defaulting to player');
+            playerType = 'player';
+        }
         if (!this.colorsEnabled) {
             return text;
         }
-        const colorType = playerType === 'player' ? 'player' : 'enemy';
-        return this.colorize(text, colorType);
+        try {
+            const colorType = playerType === 'player' ? 'player' : 'enemy';
+            return this.colorize(text, colorType);
+        }
+        catch (error) {
+            console.warn('ColorManager.formatPlayerIdentifier: Error formatting identifier, falling back to plain text:', error);
+            return text;
+        }
     }
     /**
      * Creates a colored separator line
      */
     createSeparator(length = 60, char = '-') {
-        const separator = char.repeat(length);
-        if (!this.colorsEnabled) {
-            return separator;
+        // Validate and sanitize input parameters
+        const validLength = this.validateNumericValue(length, 'length', 1, 200);
+        if (typeof char !== 'string' || char.length === 0) {
+            console.warn('ColorManager.createSeparator: Invalid character, using default');
+            char = '-';
         }
-        return this.colorize(separator, 'neutral');
+        // Use only the first character to prevent excessive memory usage
+        const safeChar = char.charAt(0);
+        try {
+            const separator = safeChar.repeat(validLength);
+            if (!this.colorsEnabled) {
+                return separator;
+            }
+            return this.colorize(separator, 'neutral');
+        }
+        catch (error) {
+            console.warn('ColorManager.createSeparator: Error creating separator, falling back to simple separator:', error);
+            return '-'.repeat(Math.min(validLength, 60));
+        }
     }
     /**
      * Enables or disables color output

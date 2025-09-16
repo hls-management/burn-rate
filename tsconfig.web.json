@@ -1,0 +1,41 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@engine/*": ["./src/engine/*"],
+      "@models/*": ["./src/models/*"],
+      "@ui/*": ["./src/ui/*"],
+      "@web/*": ["./src/web/*"]
+    }
+  },
+  "include": [
+    "src/web/**/*",
+    "src/engine/**/*",
+    "src/models/**/*",
+    "src/ui/**/*",
+    "src/GameInitializer.ts",
+    "src/ErrorHandler.ts",
+    "src/IntegrationValidator.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "src/cli.ts"
+  ]
+}

@@ -5,7 +5,17 @@ export class GameDisplay {
     colorManager;
     tacticalAnalyzer;
     constructor(config = {}) {
-        this.config = config;
+        this.config = {
+            // Set default combat display preferences
+            combatDisplay: {
+                showTacticalAnalysis: true,
+                showBattlePhases: true,
+                detailedCasualties: true,
+                useEnhancedFormatting: true,
+                ...config.combatDisplay
+            },
+            ...config
+        };
         this.colorManager = new ColorManager(config.useColors !== false);
         this.tacticalAnalyzer = new TacticalAnalyzer();
     }
@@ -170,27 +180,57 @@ export class GameDisplay {
         console.log('  Mine: +500 Metal/turn (Cost: 1,500 Metal, 600 Energy)');
     }
     /**
-     * Displays turn result including combat events
+     * Displays turn result including combat events with enhanced formatting
      */
     displayTurnResult(turnResult) {
         console.log('\n' + '='.repeat(60));
         console.log('TURN RESULT');
         console.log('='.repeat(60));
+        // Display errors first if any
         if (turnResult.errors.length > 0) {
             console.log('\nERRORS:');
             turnResult.errors.forEach(error => {
                 console.log(`❌ ${error}`);
             });
         }
-        if (turnResult.combatEvents.length > 0) {
+        // Display combat events before other turn summary information (Requirement 4.2)
+        if (turnResult.combatEvents && turnResult.combatEvents.length > 0) {
             console.log('\nCOMBAT EVENTS:');
-            turnResult.combatEvents.forEach(event => {
-                this.displayCombatEvent(event);
+            // Display all combat events that occurred during the turn (Requirement 4.1)
+            turnResult.combatEvents.forEach((event, index) => {
+                try {
+                    if (index > 0) {
+                        // Add separator between multiple combat events
+                        console.log(this.colorManager.createSeparator(60, '='));
+                    }
+                    // Use enhanced combat display if configured
+                    if (this.config.combatDisplay?.useEnhancedFormatting !== false) {
+                        this.displayCombatEvent(event);
+                    }
+                    else {
+                        this.displayBasicCombatEvent(event);
+                    }
+                }
+                catch (error) {
+                    console.log(`\n⚠️  Error displaying combat event ${index + 1}:`);
+                    console.log(`   ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    console.log('   Skipping to next event...\n');
+                }
             });
         }
         else {
-            console.log('\nNo combat this turn.');
+            // Display "No combat this turn" message (Requirement 4.3)
+            try {
+                const noCombatMessage = this.colorManager.colorize('No combat this turn.', 'neutral');
+                console.log(`\n${noCombatMessage}`);
+            }
+            catch (error) {
+                console.log('\nNo combat this turn.');
+            }
         }
+        // Display other turn summary information after combat events
+        this.displayTurnSummary(turnResult);
+        // Display game over information if applicable
         if (turnResult.gameEnded) {
             console.log(`\n🎯 GAME OVER! Winner: ${turnResult.winner?.toUpperCase()}`);
             console.log(`Victory Type: ${turnResult.victoryType?.toUpperCase()}`);
@@ -198,51 +238,376 @@ export class GameDisplay {
         console.log('\nPress Enter to continue...');
     }
     /**
+     * Displays basic combat event information without enhanced formatting
+     */
+    displayBasicCombatEvent(event) {
+        try {
+            // Validate basic event structure
+            if (!event || typeof event !== 'object') {
+                throw new Error('Invalid combat event data');
+            }
+            const attackerName = event.attacker === 'player' ? 'YOUR' : 'ENEMY';
+            const defenderName = event.attacker === 'player' ? 'ENEMY' : 'YOUR';
+            console.log(`\n${attackerName} FLEET ATTACKS ${defenderName} SYSTEM:`);
+            // Basic fleet composition display with error handling
+            const attackerTotal = this.calculateFleetTotal(event.attackerFleet);
+            const defenderTotal = this.calculateFleetTotal(event.defenderFleet);
+            console.log(`  Attacker: ${attackerTotal} ships`);
+            console.log(`  Defender: ${defenderTotal} ships`);
+            // Basic outcome display
+            const outcome = typeof event.outcome === 'string' ? event.outcome : 'unknown';
+            console.log(`  Result: ${this.formatBattleOutcome(outcome)}`);
+            // Basic casualty information with error handling
+            const attackerCasualties = this.calculateFleetTotal(event.casualties?.attacker);
+            const defenderCasualties = this.calculateFleetTotal(event.casualties?.defender);
+            if (attackerCasualties > 0 || defenderCasualties > 0) {
+                console.log(`  Casualties: ${attackerName} lost ${attackerCasualties}, ${defenderName} lost ${defenderCasualties}`);
+            }
+            // Basic survivor information with error handling
+            const attackerSurvivors = this.calculateFleetTotal(event.survivors?.attacker);
+            const defenderSurvivors = this.calculateFleetTotal(event.survivors?.defender);
+            if (attackerSurvivors > 0) {
+                console.log(`  ${attackerName} survivors: ${attackerSurvivors} ships returning home`);
+            }
+            if (defenderSurvivors > 0) {
+                console.log(`  ${defenderName} survivors: ${defenderSurvivors} ships remain in system`);
+            }
+        }
+        catch (error) {
+            console.log('\n⚠️  Error in basic combat display, using fallback:');
+            console.log(`   ${error instanceof Error ? error.message : 'Unknown error'}\n`);
+            this.displayBasicCombatEventFallback(event);
+        }
+    }
+    /**
+     * Displays turn summary information
+     */
+    displayTurnSummary(turnResult) {
+        try {
+            // Validate turn result and combat events
+            if (!turnResult || !Array.isArray(turnResult.combatEvents)) {
+                console.log('\nTurn Summary: No valid combat data available');
+                return;
+            }
+            // Display summary of turn events
+            const eventCount = turnResult.combatEvents.length;
+            if (eventCount > 0) {
+                console.log(`\nTurn Summary: ${eventCount} combat engagement(s) resolved`);
+                // Count victories and defeats with error handling
+                let playerVictories = 0;
+                let playerDefeats = 0;
+                turnResult.combatEvents.forEach((event, index) => {
+                    try {
+                        if (!event || typeof event !== 'object') {
+                            console.warn(`  Warning: Invalid combat event ${index + 1} in summary`);
+                            return;
+                        }
+                        const attacker = event.attacker;
+                        const outcome = typeof event.outcome === 'string' ? event.outcome : '';
+                        const playerWon = (attacker === 'player' && (outcome === 'decisive_attacker' || outcome.includes('attacker'))) ||
+                            (attacker !== 'player' && (outcome === 'decisive_defender' || outcome.includes('defender')));
+                        if (playerWon) {
+                            playerVictories++;
+                        }
+                        else if (outcome !== 'close_battle' && outcome !== '') {
+                            playerDefeats++;
+                        }
+                    }
+                    catch (error) {
+                        console.warn(`  Warning: Error processing combat event ${index + 1} in summary:`, error instanceof Error ? error.message : 'Unknown error');
+                    }
+                });
+                // Display victory/defeat counts with error handling
+                try {
+                    if (playerVictories > 0) {
+                        console.log(`  Player victories: ${this.colorManager.colorize(playerVictories.toString(), 'victory')}`);
+                    }
+                    if (playerDefeats > 0) {
+                        console.log(`  Player defeats: ${this.colorManager.colorize(playerDefeats.toString(), 'defeat')}`);
+                    }
+                    const closeBattles = eventCount - playerVictories - playerDefeats;
+                    if (closeBattles > 0) {
+                        console.log(`  Close battles: ${this.colorManager.colorize(closeBattles.toString(), 'neutral')}`);
+                    }
+                }
+                catch (error) {
+                    console.log(`  Player victories: ${playerVictories}`);
+                    console.log(`  Player defeats: ${playerDefeats}`);
+                    console.log(`  Close battles: ${eventCount - playerVictories - playerDefeats}`);
+                }
+            }
+        }
+        catch (error) {
+            console.log('\nTurn Summary: Error generating summary -', error instanceof Error ? error.message : 'Unknown error');
+        }
+    }
+    /**
+     * Validates combat event data before display
+     */
+    validateCombatEvent(event) {
+        const errors = [];
+        // Validate basic event structure
+        if (!event || typeof event !== 'object') {
+            errors.push('Combat event is null or not an object');
+            return { isValid: false, errors };
+        }
+        // Validate required fields
+        if (typeof event.turn !== 'number' || event.turn < 1) {
+            errors.push('Invalid turn number');
+        }
+        if (event.attacker !== 'player' && event.attacker !== 'ai') {
+            errors.push('Invalid attacker type');
+        }
+        if (!event.outcome || typeof event.outcome !== 'string') {
+            errors.push('Missing or invalid battle outcome');
+        }
+        // Validate fleet compositions
+        const attackerFleetValidation = this.validateFleetComposition(event.attackerFleet, 'attacker fleet');
+        const defenderFleetValidation = this.validateFleetComposition(event.defenderFleet, 'defender fleet');
+        errors.push(...attackerFleetValidation.errors);
+        errors.push(...defenderFleetValidation.errors);
+        // Validate casualties
+        const attackerCasualtiesValidation = this.validateFleetComposition(event.casualties?.attacker, 'attacker casualties');
+        const defenderCasualtiesValidation = this.validateFleetComposition(event.casualties?.defender, 'defender casualties');
+        errors.push(...attackerCasualtiesValidation.errors);
+        errors.push(...defenderCasualtiesValidation.errors);
+        // Validate survivors
+        const attackerSurvivorsValidation = this.validateFleetComposition(event.survivors?.attacker, 'attacker survivors');
+        const defenderSurvivorsValidation = this.validateFleetComposition(event.survivors?.defender, 'defender survivors');
+        errors.push(...attackerSurvivorsValidation.errors);
+        errors.push(...defenderSurvivorsValidation.errors);
+        // Validate mathematical consistency (original = casualties + survivors)
+        if (errors.length === 0) {
+            const attackerOriginalTotal = (event.attackerFleet?.frigates || 0) + (event.attackerFleet?.cruisers || 0) + (event.attackerFleet?.battleships || 0);
+            const attackerCasualtiesTotal = (event.casualties?.attacker?.frigates || 0) + (event.casualties?.attacker?.cruisers || 0) + (event.casualties?.attacker?.battleships || 0);
+            const attackerSurvivorsTotal = (event.survivors?.attacker?.frigates || 0) + (event.survivors?.attacker?.cruisers || 0) + (event.survivors?.attacker?.battleships || 0);
+            if (attackerOriginalTotal !== attackerCasualtiesTotal + attackerSurvivorsTotal) {
+                errors.push(`Attacker fleet math inconsistency: ${attackerOriginalTotal} original ≠ ${attackerCasualtiesTotal} casualties + ${attackerSurvivorsTotal} survivors`);
+            }
+            const defenderOriginalTotal = (event.defenderFleet?.frigates || 0) + (event.defenderFleet?.cruisers || 0) + (event.defenderFleet?.battleships || 0);
+            const defenderCasualtiesTotal = (event.casualties?.defender?.frigates || 0) + (event.casualties?.defender?.cruisers || 0) + (event.casualties?.defender?.battleships || 0);
+            const defenderSurvivorsTotal = (event.survivors?.defender?.frigates || 0) + (event.survivors?.defender?.cruisers || 0) + (event.survivors?.defender?.battleships || 0);
+            if (defenderOriginalTotal !== defenderCasualtiesTotal + defenderSurvivorsTotal) {
+                errors.push(`Defender fleet math inconsistency: ${defenderOriginalTotal} original ≠ ${defenderCasualtiesTotal} casualties + ${defenderSurvivorsTotal} survivors`);
+            }
+        }
+        return { isValid: errors.length === 0, errors };
+    }
+    /**
+     * Validates fleet composition data
+     */
+    validateFleetComposition(fleet, context) {
+        const errors = [];
+        if (!fleet) {
+            errors.push(`Missing ${context} data`);
+            return { isValid: false, errors };
+        }
+        if (typeof fleet !== 'object') {
+            errors.push(`Invalid ${context} data type`);
+            return { isValid: false, errors };
+        }
+        // Validate individual ship counts
+        const shipTypes = ['frigates', 'cruisers', 'battleships'];
+        for (const shipType of shipTypes) {
+            const count = fleet[shipType];
+            if (typeof count !== 'number' || isNaN(count) || !isFinite(count) || count < 0) {
+                errors.push(`Invalid ${shipType} count in ${context}: ${count}`);
+            }
+        }
+        return { isValid: errors.length === 0, errors };
+    }
+    /**
+     * Creates a safe fallback combat event for display when validation fails
+     */
+    createFallbackCombatEvent(originalEvent) {
+        return {
+            turn: typeof originalEvent?.turn === 'number' ? originalEvent.turn : 0,
+            attacker: originalEvent?.attacker === 'player' || originalEvent?.attacker === 'ai' ? originalEvent.attacker : 'ai',
+            attackerFleet: this.createSafeFleetComposition(originalEvent?.attackerFleet),
+            defenderFleet: this.createSafeFleetComposition(originalEvent?.defenderFleet),
+            outcome: typeof originalEvent?.outcome === 'string' ? originalEvent.outcome : 'unknown_outcome',
+            casualties: {
+                attacker: this.createSafeFleetComposition(originalEvent?.casualties?.attacker),
+                defender: this.createSafeFleetComposition(originalEvent?.casualties?.defender)
+            },
+            survivors: {
+                attacker: this.createSafeFleetComposition(originalEvent?.survivors?.attacker),
+                defender: this.createSafeFleetComposition(originalEvent?.survivors?.defender)
+            }
+        };
+    }
+    /**
+     * Creates a safe fleet composition with validated values
+     */
+    createSafeFleetComposition(fleet) {
+        return {
+            frigates: this.validateShipCount(fleet?.frigates),
+            cruisers: this.validateShipCount(fleet?.cruisers),
+            battleships: this.validateShipCount(fleet?.battleships)
+        };
+    }
+    /**
+     * Validates and sanitizes ship count values
+     */
+    validateShipCount(count) {
+        if (typeof count === 'number' && isFinite(count) && count >= 0) {
+            return Math.floor(count);
+        }
+        return 0;
+    }
+    /**
      * Displays a single combat event with enhanced formatting and tactical analysis
      */
     displayCombatEvent(event) {
-        const attackerName = event.attacker === 'player' ? 'YOUR' : 'ENEMY';
-        const defenderName = event.attacker === 'player' ? 'ENEMY' : 'YOUR';
-        const attackerType = event.attacker === 'player' ? 'player' : 'ai';
-        const defenderType = event.attacker === 'player' ? 'ai' : 'player';
-        // Create enhanced combat display with tactical analysis
-        const enhancedDisplay = this.tacticalAnalyzer.createEnhancedCombatDisplay(event);
-        // Display battle header with colors
-        const attackerHeader = this.colorManager.formatPlayerIdentifier(attackerType, attackerName);
-        const defenderHeader = this.colorManager.formatPlayerIdentifier(defenderType, defenderName);
-        console.log(`\n${attackerHeader} FLEET ATTACKS ${defenderHeader} SYSTEM:`);
-        // Display detailed fleet compositions with color coding
-        this.displayDetailedFleetComposition('Attacker', event.attackerFleet, attackerType);
-        this.displayDetailedFleetComposition('Defender', event.defenderFleet, defenderType);
-        // Display tactical analysis if available
-        if (enhancedDisplay.tacticalAdvantages.length > 0) {
-            console.log('\n  Tactical Analysis:');
-            enhancedDisplay.tacticalAdvantages.forEach(advantage => {
-                const advantageColor = advantage.advantage === 'strong' ? 'victory' :
-                    advantage.advantage === 'weak' ? 'defeat' : 'neutral';
-                const advantageText = this.colorManager.colorize(`${advantage.advantage.toUpperCase()}`, advantageColor);
-                console.log(`    ${advantage.unitType.charAt(0).toUpperCase() + advantage.unitType.slice(1)}s: ${advantageText} (${advantage.effectivenessRatio.toFixed(1)}x effectiveness)`);
+        // Validate combat event data before display
+        const validation = this.validateCombatEvent(event);
+        if (!validation.isValid) {
+            console.log('\n⚠️  Combat Event Display Error:');
+            validation.errors.forEach(error => {
+                console.log(`   ${error}`);
             });
+            // Attempt to display with fallback data
+            console.log('   Attempting to display with corrected data...\n');
+            try {
+                const fallbackEvent = this.createFallbackCombatEvent(event);
+                const fallbackValidation = this.validateCombatEvent(fallbackEvent);
+                if (fallbackValidation.isValid) {
+                    event = fallbackEvent;
+                }
+                else {
+                    console.log('   Unable to create valid fallback data. Displaying basic combat summary.\n');
+                    this.displayBasicCombatEventFallback(event);
+                    return;
+                }
+            }
+            catch (error) {
+                console.log('   Critical error in combat display. Skipping event.\n');
+                console.log(`   Error: ${error instanceof Error ? error.message : 'Unknown error'}\n`);
+                return;
+            }
         }
-        // Display battle phase progression
-        if (enhancedDisplay.battlePhases.length > 0) {
-            console.log('\n  Battle Progression:');
-            enhancedDisplay.battlePhases.forEach((phase, index) => {
-                this.displayBattlePhase(phase, index + 1);
-            });
+        try {
+            const attackerName = event.attacker === 'player' ? 'YOUR' : 'ENEMY';
+            const defenderName = event.attacker === 'player' ? 'ENEMY' : 'YOUR';
+            const attackerType = event.attacker === 'player' ? 'player' : 'ai';
+            const defenderType = event.attacker === 'player' ? 'ai' : 'player';
+            // Create enhanced combat display with tactical analysis
+            const enhancedDisplay = this.tacticalAnalyzer.createEnhancedCombatDisplay(event);
+            // Display battle header with colors
+            const attackerHeader = this.colorManager.formatPlayerIdentifier(attackerType, attackerName);
+            const defenderHeader = this.colorManager.formatPlayerIdentifier(defenderType, defenderName);
+            console.log(`\n${attackerHeader} FLEET ATTACKS ${defenderHeader} SYSTEM:`);
+            // Display detailed fleet compositions with color coding
+            this.displayDetailedFleetComposition('Attacker', event.attackerFleet, attackerType);
+            this.displayDetailedFleetComposition('Defender', event.defenderFleet, defenderType);
+            // Display tactical analysis if configured and available
+            if (this.config.combatDisplay?.showTacticalAnalysis !== false && enhancedDisplay.tacticalAdvantages.length > 0) {
+                console.log('\n  Tactical Analysis:');
+                enhancedDisplay.tacticalAdvantages.forEach(advantage => {
+                    const advantageColor = advantage.advantage === 'strong' ? 'victory' :
+                        advantage.advantage === 'weak' ? 'defeat' : 'neutral';
+                    const advantageText = this.colorManager.colorize(`${advantage.advantage.toUpperCase()}`, advantageColor);
+                    console.log(`    ${advantage.unitType.charAt(0).toUpperCase() + advantage.unitType.slice(1)}s: ${advantageText} (${advantage.effectivenessRatio.toFixed(1)}x effectiveness)`);
+                });
+            }
+            // Display battle phase progression if configured and available
+            if (this.config.combatDisplay?.showBattlePhases !== false && enhancedDisplay.battlePhases.length > 0) {
+                console.log('\n  Battle Progression:');
+                enhancedDisplay.battlePhases.forEach((phase, index) => {
+                    this.displayBattlePhase(phase, index + 1);
+                });
+            }
+            // Display battle outcome with enhanced formatting
+            const perspective = event.attacker === 'player' ? 'attacker' : 'defender';
+            const outcomeText = this.colorManager.formatBattleOutcome(event.outcome, perspective);
+            console.log(`\n  Battle Result: ${outcomeText}`);
+            // Add battle explanation based on outcome
+            this.displayBattleExplanation(event.outcome, enhancedDisplay.effectivenessRatios);
+            // Display casualty information (enhanced or basic based on configuration)
+            if (this.config.combatDisplay?.detailedCasualties !== false) {
+                this.displayEnhancedCasualties(event, enhancedDisplay.casualtyPercentages, attackerName, defenderName);
+            }
+            else {
+                this.displayBasicCasualties(event, attackerName, defenderName);
+            }
+            // Display survivors with enhanced formatting
+            this.displayEnhancedSurvivors(event, attackerName, defenderName, attackerType, defenderType);
+            // Add visual separator
+            console.log(this.colorManager.createSeparator(50, '·'));
         }
-        // Display battle outcome with enhanced formatting
-        const perspective = event.attacker === 'player' ? 'attacker' : 'defender';
-        const outcomeText = this.colorManager.formatBattleOutcome(event.outcome, perspective);
-        console.log(`\n  Battle Result: ${outcomeText}`);
-        // Add battle explanation based on outcome
-        this.displayBattleExplanation(event.outcome, enhancedDisplay.effectivenessRatios);
-        // Display enhanced casualty information
-        this.displayEnhancedCasualties(event, enhancedDisplay.casualtyPercentages, attackerName, defenderName);
-        // Display survivors with enhanced formatting
-        this.displayEnhancedSurvivors(event, attackerName, defenderName, attackerType, defenderType);
-        // Add visual separator
-        console.log(this.colorManager.createSeparator(50, '·'));
+        catch (error) {
+            console.log('⚠️  Error during enhanced combat display, falling back to basic display:');
+            console.log(`   ${error instanceof Error ? error.message : 'Unknown error'}\n`);
+            try {
+                this.displayBasicCombatEvent(event);
+            }
+            catch (fallbackError) {
+                console.log('⚠️  Critical error in combat display fallback:');
+                console.log(`   ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}\n`);
+                this.displayBasicCombatEventFallback(event);
+            }
+        }
+    }
+    /**
+     * Displays minimal combat information when all other display methods fail
+     */
+    displayBasicCombatEventFallback(event) {
+        try {
+            console.log('\n--- COMBAT EVENT (BASIC DISPLAY) ---');
+            const turn = typeof event?.turn === 'number' ? event.turn : 'Unknown';
+            const attacker = event?.attacker === 'player' ? 'Player' :
+                event?.attacker === 'ai' ? 'AI' : 'Unknown';
+            const outcome = typeof event?.outcome === 'string' ? event.outcome : 'Unknown';
+            console.log(`Turn: ${turn}`);
+            console.log(`Attacker: ${attacker}`);
+            console.log(`Outcome: ${outcome}`);
+            // Try to display basic fleet information if available
+            if (event?.attackerFleet) {
+                const attackerTotal = this.calculateFleetTotal(event.attackerFleet);
+                console.log(`Attacker Fleet: ${attackerTotal} ships`);
+            }
+            if (event?.defenderFleet) {
+                const defenderTotal = this.calculateFleetTotal(event.defenderFleet);
+                console.log(`Defender Fleet: ${defenderTotal} ships`);
+            }
+            console.log('--- END COMBAT EVENT ---\n');
+        }
+        catch (error) {
+            console.log('\n--- COMBAT EVENT DATA CORRUPTED ---');
+            console.log('Unable to display combat information due to data corruption.');
+            console.log('--- END COMBAT EVENT ---\n');
+        }
+    }
+    /**
+     * Safely calculates total fleet size with error handling
+     */
+    calculateFleetTotal(fleet) {
+        try {
+            if (!fleet || typeof fleet !== 'object') {
+                return 0;
+            }
+            const frigates = typeof fleet.frigates === 'number' && isFinite(fleet.frigates) ? Math.max(0, fleet.frigates) : 0;
+            const cruisers = typeof fleet.cruisers === 'number' && isFinite(fleet.cruisers) ? Math.max(0, fleet.cruisers) : 0;
+            const battleships = typeof fleet.battleships === 'number' && isFinite(fleet.battleships) ? Math.max(0, fleet.battleships) : 0;
+            return Math.floor(frigates + cruisers + battleships);
+        }
+        catch (error) {
+            return 0;
+        }
+    }
+    /**
+     * Safely formats battle outcome with error handling
+     */
+    formatBattleOutcome(outcome) {
+        try {
+            if (typeof outcome !== 'string') {
+                return 'UNKNOWN OUTCOME';
+            }
+            return outcome.toUpperCase().replace(/_/g, ' ');
+        }
+        catch (error) {
+            return 'UNKNOWN OUTCOME';
+        }
     }
     /**
      * Displays detailed fleet composition with color coding
@@ -356,6 +721,22 @@ export class GameDisplay {
                 explanation = 'Battle concluded with significant losses';
         }
         console.log(`    ${explanation}`);
+    }
+    /**
+     * Displays basic casualty information without detailed analysis
+     */
+    displayBasicCasualties(event, attackerName, defenderName) {
+        const attackerCasualties = event.casualties.attacker.frigates + event.casualties.attacker.cruisers + event.casualties.attacker.battleships;
+        const defenderCasualties = event.casualties.defender.frigates + event.casualties.defender.cruisers + event.casualties.defender.battleships;
+        if (attackerCasualties > 0 || defenderCasualties > 0) {
+            console.log('\n  Casualties:');
+            if (attackerCasualties > 0) {
+                console.log(`    ${attackerName}: ${attackerCasualties} ships lost`);
+            }
+            if (defenderCasualties > 0) {
+                console.log(`    ${defenderName}: ${defenderCasualties} ships lost`);
+            }
+        }
     }
     /**
      * Displays enhanced casualty information with percentages and color coding
@@ -682,18 +1063,6 @@ export class GameDisplay {
         }
         else {
             return `${remaining} turns remaining`;
-        }
-    }
-    formatBattleOutcome(outcome) {
-        switch (outcome) {
-            case 'decisive_attacker':
-                return 'DECISIVE ATTACKER VICTORY';
-            case 'decisive_defender':
-                return 'DECISIVE DEFENDER VICTORY';
-            case 'close_battle':
-                return 'CLOSE BATTLE';
-            default:
-                return outcome.toUpperCase();
         }
     }
 }

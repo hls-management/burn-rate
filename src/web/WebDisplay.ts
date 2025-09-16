@@ -1,74 +1,369 @@
 import { GameState, FleetComposition, CombatEvent } from '../models/GameState.js';
 import { PlayerState } from '../models/PlayerState.js';
 import { CommandExecutionResult } from '../ui/GameController.js';
+import { WebErrorHandler } from './WebErrorHandler.js';
 
 export interface WebDisplayConfig {
   containerId: string;
   showAnimations?: boolean;
   theme?: 'dark' | 'light';
   compactMode?: boolean;
+  updateThrottleMs?: number;
 }
 
 export class WebDisplay {
   private config: WebDisplayConfig;
   private container: HTMLElement | null = null;
+  private lastGameState: GameState | null = null;
+  private updateQueue: Array<() => void> = [];
+  private isUpdating: boolean = false;
+  private animationFrameId: number | null = null;
+  private lastUpdateTime: number = 0;
 
   constructor(config: WebDisplayConfig) {
-    this.config = config;
+    this.config = {
+      updateThrottleMs: 16, // 60fps by default
+      ...config
+    };
     this.container = document.getElementById(config.containerId);
     
     if (!this.container) {
-      throw new Error(`Container element with id '${config.containerId}' not found`);
+      const error = new Error(`Container element with id '${config.containerId}' not found`);
+      WebErrorHandler.handleDOMError(error, `#${config.containerId}`, { operation: 'WebDisplay initialization' });
+      throw error;
     }
+
+    // Set up efficient update handling
+    this.setupUpdateHandling();
   }
 
   /**
-   * Displays the main game state information
+   * Sets up efficient update handling with throttling and batching
+   */
+  private setupUpdateHandling(): void {
+    // Use requestAnimationFrame for smooth updates
+    const processUpdateQueue = () => {
+      if (this.updateQueue.length === 0) {
+        this.isUpdating = false;
+        this.animationFrameId = null;
+        return;
+      }
+
+      const now = performance.now();
+      if (now - this.lastUpdateTime < (this.config.updateThrottleMs || 16)) {
+        this.animationFrameId = requestAnimationFrame(processUpdateQueue);
+        return;
+      }
+
+      // Process all queued updates in a single frame
+      const updates = [...this.updateQueue];
+      this.updateQueue = [];
+      
+      updates.forEach(update => {
+        try {
+          update();
+        } catch (error) {
+          console.error('Update error:', error);
+          if (error instanceof Error) {
+            WebErrorHandler.handleDOMError(error, '.game-display', { operation: 'update queue processing' });
+          }
+        }
+      });
+
+      this.lastUpdateTime = now;
+      
+      if (this.updateQueue.length > 0) {
+        this.animationFrameId = requestAnimationFrame(processUpdateQueue);
+      } else {
+        this.isUpdating = false;
+        this.animationFrameId = null;
+      }
+    };
+
+    // Start the update loop when needed
+    this.startUpdateLoop = () => {
+      if (!this.isUpdating) {
+        this.isUpdating = true;
+        this.animationFrameId = requestAnimationFrame(processUpdateQueue);
+      }
+    };
+  }
+
+  private startUpdateLoop!: () => void;
+
+  /**
+   * Queues an update for efficient batched processing
+   */
+  private queueUpdate(updateFn: () => void): void {
+    this.updateQueue.push(updateFn);
+    this.startUpdateLoop();
+  }
+
+  /**
+   * Displays the main game state information with efficient updates
    */
   public displayGameState(gameState: GameState): void {
     if (!this.container) return;
 
-    try {
-      // Update turn and phase info
-      this.updateTurnInfo(gameState);
-      
-      // Update player resources
-      this.updateResourceDisplay(gameState.player.resources);
-      
-      // Update fleet status
-      this.updateFleetDisplay(gameState.player);
-      
-      // Update available fleet counts in attack panel
+    // Queue the update for efficient processing
+    this.queueUpdate(() => {
+      try {
+        // Only update changed parts for efficiency
+        this.updateChangedElements(gameState);
+        
+        // Store current state for next comparison
+        this.lastGameState = { ...gameState };
+        
+      } catch (error) {
+        console.error('Error displaying game state:', error);
+        if (error instanceof Error) {
+          WebErrorHandler.handleDOMError(error, '.game-display', { operation: 'displayGameState', gameState });
+        }
+        this.displayError('Failed to update game display');
+      }
+    });
+  }
+
+  /**
+   * Updates only the elements that have changed since last update
+   */
+  private updateChangedElements(gameState: GameState): void {
+    const lastState = this.lastGameState;
+
+    // Always update turn and phase info (these change frequently)
+    this.updateTurnInfo(gameState);
+
+    // Update resources if changed
+    if (!lastState || this.hasResourcesChanged(lastState.player.resources, gameState.player.resources)) {
+      this.updateResourceDisplayWithAnimation(gameState.player.resources);
+    }
+
+    // Update fleet if changed
+    if (!lastState || this.hasFleetChanged(lastState.player.fleet, gameState.player.fleet)) {
+      this.updateFleetDisplayWithAnimation(gameState.player);
+    }
+
+    // Update attack panel fleet counts if home fleet changed
+    if (!lastState || this.hasHomeFleetChanged(lastState.player.fleet.homeSystem, gameState.player.fleet.homeSystem)) {
       this.updateAttackPanelFleetCounts(gameState.player.fleet.homeSystem);
-      
-      // Update game status indicators
+    }
+
+    // Update game status indicators if changed
+    if (!lastState || lastState.isGameOver !== gameState.isGameOver) {
       this.updateGameStatusIndicators(gameState);
-      
-    } catch (error) {
-      console.error('Error displaying game state:', error);
-      this.displayError('Failed to update game display');
     }
   }
 
   /**
-   * Displays combat results and events
+   * Checks if resources have changed significantly
+   */
+  private hasResourcesChanged(oldResources: any, newResources: any): boolean {
+    return oldResources.metal !== newResources.metal ||
+           oldResources.energy !== newResources.energy ||
+           oldResources.metalIncome !== newResources.metalIncome ||
+           oldResources.energyIncome !== newResources.energyIncome;
+  }
+
+  /**
+   * Checks if fleet composition has changed
+   */
+  private hasFleetChanged(oldFleet: any, newFleet: any): boolean {
+    return this.hasHomeFleetChanged(oldFleet.homeSystem, newFleet.homeSystem) ||
+           oldFleet.inTransit.outbound.length !== newFleet.inTransit.outbound.length;
+  }
+
+  /**
+   * Checks if home fleet composition has changed
+   */
+  private hasHomeFleetChanged(oldHome: any, newHome: any): boolean {
+    return oldHome.frigates !== newHome.frigates ||
+           oldHome.cruisers !== newHome.cruisers ||
+           oldHome.battleships !== newHome.battleships;
+  }
+
+  /**
+   * Updates resource display with smooth animations
+   */
+  private updateResourceDisplayWithAnimation(resources: any): void {
+    const resourcesDisplay = this.container?.querySelector('#resources-display');
+    if (!resourcesDisplay) return;
+
+    // Create new content
+    const newContent = `
+      <div class="resource-item metal-display ${resources.metal < 1000 ? 'warning' : ''}">
+        <div class="resource-icon">⚙️</div>
+        <div class="resource-info">
+          <div class="resource-name">Metal</div>
+          <div class="resource-amount metal-amount">${this.formatNumber(resources.metal)}</div>
+          <div class="resource-income metal-income ${resources.metalIncome <= 0 ? 'stalled' : ''}">${this.formatIncome(resources.metalIncome)}/turn</div>
+        </div>
+      </div>
+      <div class="resource-item energy-display ${resources.energy < 1000 ? 'warning' : ''}">
+        <div class="resource-icon">⚡</div>
+        <div class="resource-info">
+          <div class="resource-name">Energy</div>
+          <div class="resource-amount energy-amount">${this.formatNumber(resources.energy)}</div>
+          <div class="resource-income energy-income ${resources.energyIncome <= 0 ? 'stalled' : ''}">${this.formatIncome(resources.energyIncome)}/turn</div>
+        </div>
+      </div>
+    `;
+
+    // Apply with animation if enabled
+    if (this.config.showAnimations) {
+      this.updateWithFadeTransition(resourcesDisplay, newContent);
+    } else {
+      resourcesDisplay.innerHTML = newContent;
+    }
+  }
+
+  /**
+   * Updates fleet display with smooth animations
+   */
+  private updateFleetDisplayWithAnimation(player: PlayerState): void {
+    const fleetDisplay = this.container?.querySelector('#fleet-display');
+    if (!fleetDisplay) return;
+
+    const homeFleet = player.fleet.homeSystem;
+    const totalHome = homeFleet.frigates + homeFleet.cruisers + homeFleet.battleships;
+    
+    const newContent = `
+      <div class="fleet-summary">
+        <div class="fleet-total">
+          <strong>Home Fleet: ${this.formatNumber(totalHome)} ships</strong>
+        </div>
+        <div class="fleet-breakdown">
+          <div class="unit-count">
+            <span class="unit-icon">🚀</span>
+            <span class="unit-name">Frigates:</span>
+            <span class="frigates-count">${this.formatNumber(homeFleet.frigates)}</span>
+          </div>
+          <div class="unit-count">
+            <span class="unit-icon">🛸</span>
+            <span class="unit-name">Cruisers:</span>
+            <span class="cruisers-count">${this.formatNumber(homeFleet.cruisers)}</span>
+          </div>
+          <div class="unit-count">
+            <span class="unit-icon">🚁</span>
+            <span class="unit-name">Battleships:</span>
+            <span class="battleships-count">${this.formatNumber(homeFleet.battleships)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="fleets-in-transit">
+        <h5>Fleets in Transit</h5>
+        <div class="transit-fleets">
+          ${this.renderInTransitFleets(player.fleet.inTransit.outbound)}
+        </div>
+      </div>
+      <div class="construction-queue">
+        <h5>Construction Queue</h5>
+        ${this.renderConstructionQueue(player.economy.constructionQueue)}
+      </div>
+      <div class="intelligence-panel">
+        <h5>Intelligence</h5>
+        ${this.renderIntelligenceInfo(player.intelligence)}
+      </div>
+    `;
+
+    // Apply with animation if enabled
+    if (this.config.showAnimations) {
+      this.updateWithSlideTransition(fleetDisplay, newContent);
+    } else {
+      fleetDisplay.innerHTML = newContent;
+    }
+  }
+
+  /**
+   * Updates element content with fade transition
+   */
+  private updateWithFadeTransition(element: Element, newContent: string): void {
+    element.classList.add('updating');
+    
+    setTimeout(() => {
+      element.innerHTML = newContent;
+      element.classList.remove('updating');
+      element.classList.add('updated');
+      
+      setTimeout(() => {
+        element.classList.remove('updated');
+      }, 300);
+    }, 150);
+  }
+
+  /**
+   * Updates element content with slide transition
+   */
+  private updateWithSlideTransition(element: Element, newContent: string): void {
+    element.classList.add('slide-out');
+    
+    setTimeout(() => {
+      element.innerHTML = newContent;
+      element.classList.remove('slide-out');
+      element.classList.add('slide-in');
+      
+      setTimeout(() => {
+        element.classList.remove('slide-in');
+      }, 300);
+    }, 150);
+  }
+
+  /**
+   * Displays combat results and events with smooth animations
    */
   public displayCombatResults(events: CombatEvent[]): void {
     if (!this.container || events.length === 0) return;
 
-    const combatEventsContainer = this.container.querySelector('#combat-events');
+    // Queue combat updates for smooth processing
+    this.queueUpdate(() => {
+      this.processCombatEvents(events);
+    });
+  }
+
+  /**
+   * Processes combat events with staggered animations
+   */
+  private processCombatEvents(events: CombatEvent[]): void {
+    const combatEventsContainer = this.container?.querySelector('#combat-events');
     if (!combatEventsContainer) return;
 
-    events.forEach(event => {
-      const eventElement = this.createCombatEventElement(event);
-      combatEventsContainer.appendChild(eventElement);
-      
-      // Scroll to show latest event
-      eventElement.scrollIntoView({ behavior: 'smooth' });
+    events.forEach((event, index) => {
+      // Stagger the display of multiple events for better UX
+      setTimeout(() => {
+        this.displaySingleCombatEvent(event, combatEventsContainer);
+      }, index * 500); // 500ms delay between events
     });
 
     // Limit log size to prevent memory issues
-    this.limitLogSize(combatEventsContainer, 50);
+    setTimeout(() => {
+      this.limitLogSize(combatEventsContainer, 50);
+    }, events.length * 500 + 1000);
+  }
+
+  /**
+   * Displays a single combat event with animation
+   */
+  private displaySingleCombatEvent(event: CombatEvent, container: Element): void {
+    const eventElement = this.createCombatEventElement(event);
+    
+    if (this.config.showAnimations) {
+      // Add with slide-in animation
+      eventElement.classList.add('combat-event-entering');
+      container.appendChild(eventElement);
+      
+      // Trigger animation
+      setTimeout(() => {
+        eventElement.classList.remove('combat-event-entering');
+        eventElement.classList.add('combat-event-entered');
+      }, 50);
+      
+      // Scroll to show latest event after animation
+      setTimeout(() => {
+        eventElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 300);
+    } else {
+      container.appendChild(eventElement);
+      eventElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }
 
   /**
@@ -99,31 +394,122 @@ export class WebDisplay {
   }
 
   /**
-   * Updates resource display with current values
+   * Updates resource display with current values (legacy method for compatibility)
    */
   public updateResourceDisplay(resources: any): void {
-    // Update the resources display container
-    const resourcesDisplay = this.container?.querySelector('#resources-display');
-    if (!resourcesDisplay) return;
+    this.queueUpdate(() => {
+      this.updateResourceDisplayWithAnimation(resources);
+    });
+  }
 
-    resourcesDisplay.innerHTML = `
-      <div class="resource-item metal-display ${resources.metal < 1000 ? 'warning' : ''}">
-        <div class="resource-icon">⚙️</div>
-        <div class="resource-info">
-          <div class="resource-name">Metal</div>
-          <div class="resource-amount metal-amount">${this.formatNumber(resources.metal)}</div>
-          <div class="resource-income metal-income ${resources.metalIncome <= 0 ? 'stalled' : ''}">${this.formatIncome(resources.metalIncome)}/turn</div>
-        </div>
-      </div>
-      <div class="resource-item energy-display ${resources.energy < 1000 ? 'warning' : ''}">
-        <div class="resource-icon">⚡</div>
-        <div class="resource-info">
-          <div class="resource-name">Energy</div>
-          <div class="resource-amount energy-amount">${this.formatNumber(resources.energy)}</div>
-          <div class="resource-income energy-income ${resources.energyIncome <= 0 ? 'stalled' : ''}">${this.formatIncome(resources.energyIncome)}/turn</div>
-        </div>
-      </div>
-    `;
+  /**
+   * Handles concurrent state changes by debouncing rapid updates
+   */
+  public handleConcurrentStateChange(gameState: GameState): void {
+    // Cancel any pending updates for the same state
+    this.debouncedDisplayGameState(gameState);
+  }
+
+  /**
+   * Debounced version of displayGameState to handle rapid updates
+   */
+  private debouncedDisplayGameState = this.debounce((gameState: GameState) => {
+    this.displayGameState(gameState);
+  }, 50); // 50ms debounce
+
+  /**
+   * Debounce utility function
+   */
+  private debounce<T extends (...args: any[]) => void>(func: T, wait: number): T {
+    let timeout: NodeJS.Timeout;
+    return ((...args: any[]) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    }) as T;
+  }
+
+  /**
+   * Handles user interaction feedback with immediate visual response
+   */
+  public handleUserInteractionFeedback(action: string, success: boolean): void {
+    this.queueUpdate(() => {
+      this.showInteractionFeedback(action, success);
+    });
+  }
+
+  /**
+   * Shows immediate visual feedback for user interactions
+   */
+  private showInteractionFeedback(action: string, success: boolean): void {
+    const feedbackElement = document.createElement('div');
+    feedbackElement.className = `interaction-feedback ${success ? 'success' : 'error'}`;
+    feedbackElement.textContent = success ? `${action} successful` : `${action} failed`;
+    
+    // Position near the relevant UI element
+    const actionButton = this.container?.querySelector(`[data-action="${action}"]`);
+    if (actionButton) {
+      const rect = actionButton.getBoundingClientRect();
+      feedbackElement.style.position = 'fixed';
+      feedbackElement.style.left = `${rect.left}px`;
+      feedbackElement.style.top = `${rect.top - 30}px`;
+      feedbackElement.style.zIndex = '1000';
+    }
+    
+    document.body.appendChild(feedbackElement);
+    
+    // Animate and remove
+    if (this.config.showAnimations) {
+      feedbackElement.classList.add('feedback-entering');
+      setTimeout(() => {
+        feedbackElement.classList.add('feedback-leaving');
+        setTimeout(() => {
+          if (feedbackElement.parentNode) {
+            feedbackElement.remove();
+          }
+        }, 300);
+      }, 2000);
+    } else {
+      setTimeout(() => {
+        if (feedbackElement.parentNode) {
+          feedbackElement.remove();
+        }
+      }, 2000);
+    }
+  }
+
+  /**
+   * Optimizes DOM updates by using DocumentFragment for batch operations
+   */
+  private batchDOMUpdates(updates: Array<{ element: Element; content: string }>): void {
+    const fragment = document.createDocumentFragment();
+    
+    updates.forEach(({ element, content }) => {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = content;
+      
+      // Move all children to fragment
+      while (tempDiv.firstChild) {
+        fragment.appendChild(tempDiv.firstChild);
+      }
+      
+      // Replace element content
+      element.innerHTML = '';
+      element.appendChild(fragment.cloneNode(true));
+    });
+  }
+
+  /**
+   * Cleans up resources and cancels pending updates
+   */
+  public cleanup(): void {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    
+    this.updateQueue = [];
+    this.isUpdating = false;
+    this.lastGameState = null;
   }  /**
 
    * Updates turn and phase information

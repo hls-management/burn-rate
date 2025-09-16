@@ -3,18 +3,7 @@ import { PlayerState } from '../models/PlayerState.js';
 import { TurnResult } from '../engine/GameEngine.js';
 import { ColorManager } from './ColorManager.js';
 import { TacticalAnalyzer } from './TacticalAnalyzer.js';
-
-export interface CLIConfig {
-  showDebugInfo?: boolean;
-  autoAdvanceTurn?: boolean;
-  useColors?: boolean;
-  combatDisplay?: {
-    showTacticalAnalysis?: boolean;
-    showBattlePhases?: boolean;
-    detailedCasualties?: boolean;
-    useEnhancedFormatting?: boolean;
-  };
-}
+import { CLIConfig } from './CLIInterface.js';
 
 export class GameDisplay {
   private config: CLIConfig;
@@ -1243,16 +1232,5 @@ export class GameDisplay {
     }
   }
 
-  private formatBattleOutcome(outcome: string): string {
-    switch (outcome) {
-      case 'decisive_attacker':
-        return 'DECISIVE ATTACKER VICTORY';
-      case 'decisive_defender':
-        return 'DECISIVE DEFENDER VICTORY';
-      case 'close_battle':
-        return 'CLOSE BATTLE';
-      default:
-        return outcome.toUpperCase();
-    }
-  }
+
 }

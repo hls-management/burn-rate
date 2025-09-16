@@ -4,6 +4,7 @@ import { UNIT_STATS } from '../models/Fleet.js';
 export class GameController {
     gameEngine;
     pendingPlayerActions = [];
+    lastTurnResult = null;
     constructor(gameEngine) {
         this.gameEngine = gameEngine;
     }
@@ -234,6 +235,8 @@ export class GameController {
         try {
             // Process the turn with all pending actions
             const turnResult = this.gameEngine.processTurn(this.pendingPlayerActions);
+            // Store the turn result for display
+            this.lastTurnResult = turnResult;
             // Clear pending actions
             this.pendingPlayerActions = [];
             if (turnResult.success) {
@@ -378,6 +381,12 @@ export class GameController {
      */
     clearPendingActions() {
         this.pendingPlayerActions = [];
+    }
+    /**
+     * Gets the last turn result for display
+     */
+    getLastTurnResult() {
+        return this.lastTurnResult;
     }
     /**
      * Gets the game engine instance

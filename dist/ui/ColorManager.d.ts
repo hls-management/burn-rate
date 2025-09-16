@@ -37,6 +37,10 @@ export declare class ColorManager {
      */
     private getDefaultTheme;
     /**
+     * Validates and sanitizes numeric values with optional bounds checking
+     */
+    private validateNumericValue;
+    /**
      * Detects if the terminal supports color output
      */
     private detectColorSupport;

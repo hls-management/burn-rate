@@ -1,0 +1,69 @@
+# Docker Compose configuration for Burn Rate
+
+version: '3.8'
+
+services:
+  # CLI version service
+  burn-rate-cli:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cli
+    container_name: burn-rate-cli
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    volumes:
+      # Mount for game saves (optional)
+      - burn-rate-saves:/app/saves
+    networks:
+      - burn-rate-network
+    profiles:
+      - cli
+
+  # Web version service
+  burn-rate-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    container_name: burn-rate-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - NGINX_WORKER_PROCESSES=auto
+    networks:
+      - burn-rate-network
+    profiles:
+      - web
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Reverse proxy (optional, for production)
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: burn-rate-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-proxy.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - burn-rate-web
+    networks:
+      - burn-rate-network
+    profiles:
+      - production
+
+volumes:
+  burn-rate-saves:
+    driver: local
+
+networks:
+  burn-rate-network:
+    driver: bridge

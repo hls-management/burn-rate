@@ -2,6 +2,8 @@ import { GameEngine, TurnResult } from '../engine/GameEngine.js';
 import { GameController, CommandExecutionResult } from '../ui/GameController.js';
 import { GameState } from '../models/GameState.js';
 import { Command } from '../ui/InputHandler.js';
+import { WebErrorHandler } from './WebErrorHandler.js';
+import { HelpSystem } from './HelpSystem.js';
 
 export interface WebConfig {
   containerId: string;
@@ -22,11 +24,19 @@ export class WebInterface {
   private config: WebConfig;
   private isRunning: boolean = false;
   private container: HTMLElement | null = null;
+  private helpSystem: HelpSystem | null = null;
 
   constructor(gameEngine: GameEngine, config: WebConfig) {
     this.gameEngine = gameEngine;
     this.gameController = new GameController(gameEngine);
     this.config = config;
+    
+    // Initialize error handler
+    WebErrorHandler.getInstance({
+      containerId: config.containerId,
+      enableLogging: config.showDebugInfo || false,
+      enableUserNotifications: true
+    });
   }
 
   /**
@@ -37,7 +47,9 @@ export class WebInterface {
       // Find the container element
       this.container = document.getElementById(this.config.containerId);
       if (!this.container) {
-        throw new Error(`Container element with id '${this.config.containerId}' not found`);
+        const error = new Error(`Container element with id '${this.config.containerId}' not found`);
+        WebErrorHandler.handleDOMError(error, `#${this.config.containerId}`, { operation: 'initialization' });
+        throw error;
       }
 
       // Initialize the interface
@@ -46,12 +58,18 @@ export class WebInterface {
       // Set up DOM event listeners
       this.setupEventListeners();
       
+      // Initialize help system
+      this.initializeHelpSystem();
+      
       // Initial display update
       this.updateDisplay();
       
       console.log('Web interface started successfully');
     } catch (error) {
       console.error('Failed to start web interface:', error);
+      if (error instanceof Error) {
+        WebErrorHandler.handleDOMError(error, `#${this.config.containerId}`, { operation: 'start' });
+      }
       throw error;
     }
   }
@@ -62,6 +80,13 @@ export class WebInterface {
   public stop(): void {
     this.isRunning = false;
     this.removeEventListeners();
+    
+    // Clean up help system
+    if (this.helpSystem) {
+      this.helpSystem.cleanup();
+      this.helpSystem = null;
+    }
+    
     console.log('Web interface stopped');
   }
 
@@ -106,6 +131,9 @@ export class WebInterface {
       return result;
     } catch (error) {
       console.error('Error handling user action:', error);
+      if (error instanceof Error) {
+        WebErrorHandler.handleGameStateError(error, this.gameEngine.getGameState());
+      }
       return {
         success: false,
         message: `Action failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -137,6 +165,9 @@ export class WebInterface {
       }
     } catch (error) {
       console.error('Error updating display:', error);
+      if (error instanceof Error) {
+        WebErrorHandler.handleDOMError(error, `#${this.config.containerId}`, { operation: 'updateDisplay' });
+      }
     }
   }
 
@@ -343,7 +374,11 @@ export class WebInterface {
         return { type: 'status' };
       
       case 'help':
-        return { type: 'help' };
+        // Handle help through help system instead of game command
+        if (this.helpSystem) {
+          this.helpSystem.showHelpModal();
+        }
+        return null;
       
       default:
         return null;
@@ -361,12 +396,20 @@ export class WebInterface {
       // Update display after turn processing
       this.updateDisplay();
       
+      // Auto-save if enabled
+      if (this.config.autoSave) {
+        this.saveGameState();
+      }
+      
       // Check for game over
       if (this.gameEngine.isGameOver()) {
         this.handleGameOver();
       }
     } catch (error) {
       console.error('Error processing turn:', error);
+      if (error instanceof Error) {
+        WebErrorHandler.handleGameStateError(error, this.gameEngine.getGameState());
+      }
       this.displayError(`Turn processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -448,6 +491,9 @@ export class WebInterface {
       console.log('Game state saved');
     } catch (error) {
       console.error('Failed to save game state:', error);
+      if (error instanceof Error) {
+        WebErrorHandler.handleStorageError(error, 'saveGameState');
+      }
     }
   }
 
@@ -466,6 +512,9 @@ export class WebInterface {
       return false;
     } catch (error) {
       console.error('Failed to load game state:', error);
+      if (error instanceof Error) {
+        WebErrorHandler.handleStorageError(error, 'loadGameState');
+      }
       return false;
     }
   }
@@ -479,6 +528,36 @@ export class WebInterface {
       console.log('Saved game state cleared');
     } catch (error) {
       console.error('Failed to clear saved state:', error);
+      if (error instanceof Error) {
+        WebErrorHandler.handleStorageError(error, 'clearSavedState');
+      }
     }
+  }
+
+  /**
+   * Initializes the help system
+   */
+  private initializeHelpSystem(): void {
+    try {
+      this.helpSystem = new HelpSystem({
+        containerId: this.config.containerId,
+        enableTooltips: true,
+        enableTutorial: true,
+        showHelpButton: true,
+        tutorialAutoStart: false // Don't auto-start to avoid interrupting gameplay
+      });
+    } catch (error) {
+      console.error('Failed to initialize help system:', error);
+      if (error instanceof Error) {
+        WebErrorHandler.handleDOMError(error, `#${this.config.containerId}`, { operation: 'initializeHelpSystem' });
+      }
+    }
+  }
+
+  /**
+   * Gets the help system instance
+   */
+  public getHelpSystem(): HelpSystem | null {
+    return this.helpSystem;
   }
 }
