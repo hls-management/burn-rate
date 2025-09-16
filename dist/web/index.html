@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Burn Rate - Strategy Game</title>
+    <meta name="description" content="A turn-based strategy game with roguelike elements">
+  <script type="module" crossorigin src="/assets/main-CjsaDmCr.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/main-BijZybMR.css">
+</head>
+<body>
+    <div id="burn-rate-game">
+        <header class="game-header">
+            <h1>Burn Rate</h1>
+            <div class="turn-info">
+                Turn: <span id="current-turn">1</span>
+            </div>
+            <div class="game-controls">
+                <button id="new-game-btn" class="secondary-button">New Game</button>
+                <button id="settings-btn" class="secondary-button">Settings</button>
+            </div>
+        </header>
+        
+        <main class="game-main">
+            <section class="game-status">
+                <div class="resources-panel">
+                    <h3>Resources</h3>
+                    <div id="resources-display">
+                        <!-- Resource display will be populated by JavaScript -->
+                    </div>
+                </div>
+                <div class="fleet-panel">
+                    <h3>Fleet Status</h3>
+                    <div id="fleet-display">
+                        <!-- Fleet information will be populated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+            
+            <section class="game-actions">
+                <div class="command-tabs">
+                    <button class="tab-button active" data-tab="build">Build</button>
+                    <button class="tab-button" data-tab="attack">Attack</button>
+                    <button class="tab-button" data-tab="scan">Scan</button>
+                </div>
+                
+                <div class="command-panels">
+                    <div id="build-panel" class="command-panel active">
+                        <h4>Build Units & Structures</h4>
+                        <!-- Build interface will be populated by JavaScript -->
+                    </div>
+                    <div id="attack-panel" class="command-panel">
+                        <h4>Attack</h4>
+                        <!-- Attack interface will be populated by JavaScript -->
+                    </div>
+                    <div id="scan-panel" class="command-panel">
+                        <h4>Intelligence Scan</h4>
+                        <!-- Scan interface will be populated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+            
+            <section class="game-log">
+                <div class="combat-log">
+                    <h4>Combat Log</h4>
+                    <div id="combat-events">
+                        <!-- Combat events will be populated by JavaScript -->
+                    </div>
+                </div>
+                <div class="system-messages">
+                    <h4>System Messages</h4>
+                    <div id="system-log">
+                        <!-- System messages will be populated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <footer class="game-footer">
+            <button id="end-turn-btn" class="primary-button">End Turn</button>
+            <button id="help-btn" class="secondary-button">Help</button>
+        </footer>
+        
+        <!-- Loading overlay -->
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p>Loading game...</p>
+        </div>
+        
+        <!-- Modal for help, settings, etc. -->
+        <div id="modal-overlay" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-title">Modal Title</h3>
+                    <button id="modal-close" class="close-button">&times;</button>
+                </div>
+                <div class="modal-body" id="modal-body">
+                    <!-- Modal content will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+</body>
+</html>
