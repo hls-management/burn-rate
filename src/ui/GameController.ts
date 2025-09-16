@@ -15,6 +15,7 @@ export interface CommandExecutionResult {
 export class GameController {
   private gameEngine: GameEngine;
   private pendingPlayerActions: Command[] = [];
+  private lastTurnResult: TurnResult | null = null;
 
   constructor(gameEngine: GameEngine) {
     this.gameEngine = gameEngine;
@@ -279,6 +280,9 @@ export class GameController {
       // Process the turn with all pending actions
       const turnResult = this.gameEngine.processTurn(this.pendingPlayerActions);
       
+      // Store the turn result for display
+      this.lastTurnResult = turnResult;
+      
       // Clear pending actions
       this.pendingPlayerActions = [];
 
@@ -435,6 +439,13 @@ export class GameController {
    */
   public clearPendingActions(): void {
     this.pendingPlayerActions = [];
+  }
+
+  /**
+   * Gets the last turn result for display
+   */
+  public getLastTurnResult(): TurnResult | null {
+    return this.lastTurnResult;
   }
 
   /**

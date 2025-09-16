@@ -338,6 +338,255 @@ describe('ColorManager', () => {
     });
   });
 
+  describe('Error Handling and Fallbacks', () => {
+    let consoleSpy: any;
+    let errorColorManager: ColorManager;
+
+    beforeEach(() => {
+      consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Create a color manager with colors disabled for error testing
+      errorColorManager = new ColorManager(false);
+    });
+
+    afterEach(() => {
+      consoleSpy.mockRestore();
+    });
+
+    describe('colorize method error handling', () => {
+      it('should handle non-string text input', () => {
+        const result = errorColorManager.colorize(123 as any, 'victory');
+        
+        expect(result).toBe('123');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'ColorManager.colorize: text parameter must be a string, received:', 'number'
+        );
+      });
+
+      it('should handle null text input', () => {
+        const result = errorColorManager.colorize(null as any, 'victory');
+        
+        expect(result).toBe('');
+        expect(consoleSpy).toHaveBeenCalled();
+      });
+
+      it('should handle undefined text input', () => {
+        const result = errorColorManager.colorize(undefined as any, 'victory');
+        
+        expect(result).toBe('');
+        expect(consoleSpy).toHaveBeenCalled();
+      });
+
+      it('should handle missing color codes gracefully', () => {
+        // Create a color manager with colors enabled for this test
+        const testColorManager = new ColorManager(true);
+        
+        // Corrupt the theme to simulate missing color codes
+        const corruptTheme = { ...testColorManager.getTheme() };
+        (corruptTheme as any).victory = undefined; // Set to undefined instead of deleting
+        testColorManager.setTheme(corruptTheme);
+        
+        const result = testColorManager.colorize('test', 'victory');
+        
+        expect(result).toBe('test');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining("Missing color code for type 'victory'")
+        );
+      });
+    });
+
+    describe('formatFleetComposition error handling', () => {
+      it('should handle null fleet composition', () => {
+        const result = errorColorManager.formatFleetComposition(null as any);
+        
+        expect(result).toBe('0F, 0C, 0B');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'ColorManager.formatFleetComposition: Invalid fleet composition data, using defaults'
+        );
+      });
+
+      it('should handle invalid fleet composition data', () => {
+        const result = errorColorManager.formatFleetComposition('invalid' as any);
+        
+        expect(result).toBe('0F, 0C, 0B');
+        expect(consoleSpy).toHaveBeenCalled();
+      });
+
+      it('should handle invalid ship counts', () => {
+        const invalidFleet = {
+          frigates: 'not a number',
+          cruisers: NaN,
+          battleships: Infinity
+        } as any;
+        
+        const result = errorColorManager.formatFleetComposition(invalidFleet);
+        
+        expect(result).toBe('0F, 0C, 0B');
+        expect(consoleSpy).toHaveBeenCalledTimes(3); // One warning per invalid field
+      });
+
+      it('should handle negative ship counts', () => {
+        const negativeFleet = {
+          frigates: -10,
+          cruisers: -5,
+          battleships: -2
+        };
+        
+        const result = errorColorManager.formatFleetComposition(negativeFleet);
+        
+        expect(result).toBe('0F, 0C, 0B');
+        expect(consoleSpy).toHaveBeenCalledTimes(3);
+      });
+
+      it('should handle extremely large ship counts', () => {
+        const largeFleet = {
+          frigates: Number.MAX_SAFE_INTEGER + 1,
+          cruisers: 1e20,
+          battleships: Number.POSITIVE_INFINITY
+        };
+        
+        const result = errorColorManager.formatFleetComposition(largeFleet);
+        
+        // Should clamp to maximum safe values
+        expect(result).toContain('F');
+        expect(result).toContain('C');
+        expect(result).toContain('B');
+        expect(consoleSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('formatBattleOutcome error handling', () => {
+      it('should handle non-string outcome', () => {
+        const result = errorColorManager.formatBattleOutcome(123 as any, 'attacker');
+        
+        expect(result).toBe('UNKNOWN OUTCOME');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'ColorManager.formatBattleOutcome: Invalid outcome type, using default'
+        );
+      });
+
+      it('should handle invalid perspective', () => {
+        const result = errorColorManager.formatBattleOutcome('decisive_attacker', 'invalid' as any);
+        
+        expect(result).toContain('DECISIVE ATTACKER');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'ColorManager.formatBattleOutcome: Invalid perspective, defaulting to attacker'
+        );
+      });
+
+      it('should handle unknown outcome types', () => {
+        // Use a color manager with colors enabled for this test to reach the switch statement
+        const testColorManager = new ColorManager(true);
+        const result = testColorManager.formatBattleOutcome('unknown_battle_type', 'attacker');
+        
+        expect(result).toContain('UNKNOWN BATTLE TYPE');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining("Unknown outcome 'unknown_battle_type'")
+        );
+      });
+    });
+
+    describe('formatCasualties error handling', () => {
+      it('should handle invalid casualty numbers', () => {
+        const result = errorColorManager.formatCasualties('invalid' as any, 100);
+        
+        expect(result).toBe('0 ships (0%)');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Invalid casualties value')
+        );
+      });
+
+      it('should handle invalid total numbers', () => {
+        const result = errorColorManager.formatCasualties(25, 'invalid' as any);
+        
+        expect(result).toBe('25 ships (0%)');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Invalid total value')
+        );
+      });
+
+      it('should handle division by zero', () => {
+        const result = errorColorManager.formatCasualties(25, 0);
+        
+        expect(result).toBe('25 ships (0%)');
+      });
+    });
+
+    describe('formatSurvivors error handling', () => {
+      it('should handle invalid survivor numbers', () => {
+        const result = errorColorManager.formatSurvivors(NaN);
+        
+        expect(result).toBe('0 ships');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Invalid survivors value')
+        );
+      });
+    });
+
+    describe('formatPlayerIdentifier error handling', () => {
+      it('should handle non-string text', () => {
+        const result = errorColorManager.formatPlayerIdentifier('player', 123 as any);
+        
+        expect(result).toBe('123');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'ColorManager.formatPlayerIdentifier: text parameter must be a string'
+        );
+      });
+
+      it('should handle invalid player type', () => {
+        const result = errorColorManager.formatPlayerIdentifier('invalid' as any, 'test');
+        
+        expect(result).toBe('test');
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'ColorManager.formatPlayerIdentifier: Invalid playerType, defaulting to player'
+        );
+      });
+    });
+
+    describe('createSeparator error handling', () => {
+      it('should handle invalid length values', () => {
+        const result = errorColorManager.createSeparator(-10);
+        
+        expect(result).toBe('-'); // Should use minimum length of 1
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('length value -10 below minimum 1')
+        );
+      });
+
+      it('should handle extremely large length values', () => {
+        const result = errorColorManager.createSeparator(1000);
+        
+        expect(result).toBe('-'.repeat(200)); // Should clamp to maximum
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('length value 1000 above maximum 200')
+        );
+      });
+
+      it('should handle invalid character types', () => {
+        const result = errorColorManager.createSeparator(10, null as any);
+        
+        expect(result).toBe('-'.repeat(10));
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'ColorManager.createSeparator: Invalid character, using default'
+        );
+      });
+
+      it('should handle empty character string', () => {
+        const result = errorColorManager.createSeparator(10, '');
+        
+        expect(result).toBe('-'.repeat(10));
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'ColorManager.createSeparator: Invalid character, using default'
+        );
+      });
+
+      it('should handle multi-character strings by using first character', () => {
+        const result = errorColorManager.createSeparator(5, 'abc');
+        
+        expect(result).toBe('aaaaa');
+      });
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle empty text colorization', () => {
       const result = colorManager.colorize('', 'victory');

@@ -47,6 +47,18 @@ export declare class GameDisplay {
      */
     private displayDetailedFleetComposition;
     /**
+     * Displays a single battle phase with appropriate formatting and colors
+     */
+    private displayBattlePhase;
+    /**
+     * Formats phase advantage with appropriate colors
+     */
+    private formatPhaseAdvantage;
+    /**
+     * Formats strength ratio with contextual information
+     */
+    private formatStrengthRatio;
+    /**
      * Displays battle explanation based on outcome and effectiveness ratios
      */
     private displayBattleExplanation;
@@ -55,13 +67,41 @@ export declare class GameDisplay {
      */
     private displayEnhancedCasualties;
     /**
-     * Displays enhanced survivor information with color coding
+     * Displays enhanced survivor information with tactical context and color coding
      */
     private displayEnhancedSurvivors;
     /**
      * Formats casualty breakdown by unit type
      */
     private formatCasualtyBreakdown;
+    /**
+     * Gets casualty severity description based on loss rate
+     */
+    private getCasualtySeverity;
+    /**
+     * Gets color for casualty severity
+     */
+    private getCasualtySeverityColor;
+    /**
+     * Gets tactical context for casualties based on unit types lost
+     */
+    private getCasualtyTacticalContext;
+    /**
+     * Displays comparative loss analysis between attacker and defender
+     */
+    private displayComparativeLossAnalysis;
+    /**
+     * Gets color for survival rate display
+     */
+    private getSurvivalRateColor;
+    /**
+     * Gets tactical context for survivors
+     */
+    private getSurvivorTacticalContext;
+    /**
+     * Assesses defensive strength of surviving fleet
+     */
+    private assessDefensiveStrength;
     /**
      * Displays game over screen
      */
