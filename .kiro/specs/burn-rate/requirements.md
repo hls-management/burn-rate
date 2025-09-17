@@ -92,12 +92,11 @@ Burn Rate is a single-player, turn-based web strategy game with roguelike elemen
 
 ### Requirement 8
 
-**User Story:** As a player, I want victory conditions based on crippling the AI economy or destroying their fleet, so that I have multiple strategic paths to success.
+**User Story:** As a player, I want victory conditions based on destroying the AI fleet, so that the game ends decisively when the enemy can no longer fight.
 
 #### Acceptance Criteria
 
-1. WHEN the AI's resource income drops below sustainability THEN the system SHALL trigger economic victory for the player
-2. WHEN the AI's fleet is reduced below a critical threshold THEN the system SHALL trigger military victory for the player
-3. WHEN victory conditions are met THEN the system SHALL immediately end the game and display victory results
-4. WHEN approaching victory conditions THEN the system SHALL provide feedback on progress toward each victory type
-5. WHEN the AI detects impending defeat THEN the system SHALL allow for desperate last-stand behaviors
+1. WHEN the AI's fleet is eliminated (0 ships at home and no fleets in transit) THEN the system SHALL trigger military victory for the player immediately
+2. WHEN victory conditions are met THEN the system SHALL immediately end the game and display victory results
+3. WHEN approaching victory conditions THEN the system SHALL provide feedback on progress toward fleet elimination
+4. WHEN the AI detects impending defeat THEN the system SHALL allow for desperate last-stand behaviors

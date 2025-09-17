@@ -127,23 +127,21 @@ export class WebInputHandler {
 }
 ```
 
-### 4. GameStateManager
+### 4. SessionManager (No Persistence)
 
-**Purpose:** Manages game state persistence and synchronization for the browser environment.
+**Purpose:** Controls session lifecycle for the browser environment without any persistent storage.
 
 **Key Responsibilities:**
-- Save/load game state to localStorage
-- Handle page refresh scenarios
-- Manage multiple game sessions
-- Provide undo/redo functionality (optional)
+- Maintain in-memory game state only for the lifetime of the tab
+- On reload or navigation, start a new game (permadeath, no saving)
+- Provide explicit "Restart" control to begin a new run
 
 **Interface:**
 ```typescript
-export class GameStateManager {
-  public saveGameState(gameState: GameState): void
-  public loadGameState(): GameState | null
-  public clearSavedState(): void
-  public hasValidSavedState(): boolean
+export class SessionManager {
+  public getCurrentState(): GameState
+  public startNewGame(config?: Partial<WebGameConfig>): GameState
+  public restart(): GameState
 }
 ```
 
@@ -230,10 +228,10 @@ The web interface will use a structured HTML layout:
 
 ### Browser-Specific Error Scenarios
 
-1. **Local Storage Failures:** Graceful degradation when localStorage is unavailable
-2. **DOM Manipulation Errors:** Robust error handling for missing elements
+1. **DOM Manipulation Errors:** Robust error handling for missing elements
+2. **Navigation/Reload:** Detect unload/reload and communicate that runs are not saved
 3. **Network Issues:** Handle potential future multiplayer scenarios
-4. **Browser Compatibility:** Ensure compatibility with modern browsers
+4. **Browser Compatibility:** Ensure compatibility with supported browsers
 
 ### Error Recovery Strategies
 
@@ -252,7 +250,7 @@ class WebErrorHandler {
 - Test WebInterface controller methods
 - Test WebDisplay rendering functions
 - Test WebInputHandler command processing
-- Test GameStateManager persistence logic
+- Test SessionManager lifecycle (no persistence)
 
 ### Integration Testing
 - Test complete user workflows (build → attack → end turn)
@@ -317,7 +315,7 @@ export default defineConfig({
     "build": "tsc && vite build",
     "build:cli": "tsc",
     "build:web": "vite build",
-    "dev:web": "vite serve",
+    "dev:web": "vite",
     "preview:web": "vite preview",
     "start:cli": "node dist/cli.js",
     "start:web": "npm run build:web && npm run preview:web"
@@ -335,7 +333,7 @@ src/
 │   ├── WebInterface.ts    # Main web controller
 │   ├── WebDisplay.ts      # Display management
 │   ├── WebInputHandler.ts # Input handling
-│   ├── GameStateManager.ts# State persistence
+│   ├── SessionManager.ts   # In-memory session lifecycle (no persistence)
 │   ├── styles/            # CSS files
 │   │   ├── main.css
 │   │   ├── components.css
@@ -377,7 +375,7 @@ class PerformanceManager {
 
 1. **Input Validation:** All user inputs validated before processing
 2. **XSS Prevention:** Proper HTML escaping for dynamic content
-3. **Local Storage Security:** Encrypt sensitive game data if needed
+3. **No Persistent Storage:** No localStorage/sessionStorage usage for game state
 4. **Content Security Policy:** Implement CSP headers for production
 
 ### Data Protection
@@ -386,7 +384,21 @@ class PerformanceManager {
 class SecurityManager {
   public static sanitizeInput(input: string): string
   public static validateGameState(state: any): boolean
-  public static encryptLocalStorage(data: any): string
-  public static decryptLocalStorage(encrypted: string): any
 }
 ```
+
+## Target Browser Support Matrix
+
+- Safari (desktop) — last 2 major versions
+- Chrome (desktop) — last 2 major versions
+- iOS Safari — iOS 15+ (latest 2 major)
+- Chrome on Android — Android 11+ (latest 2 major)
+
+All other browsers are best-effort and not officially supported.
+
+## Hosting and Deployment (AWS)
+
+- Host static web build on AWS (S3 + CloudFront recommended)
+- Configure CloudFront with appropriate cache policies and gzip/brotli
+- Set CSP headers via CloudFront: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';
+- Configure error responses to serve index.html on 404 (if SPA routing is used)
